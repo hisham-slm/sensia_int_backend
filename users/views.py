@@ -30,6 +30,7 @@ def login(request):
     email = user_data.get("email")
     password = user_data.get("password")
 
+    print(email, password)
     if not email or not password:
         return Response(
             {"message": "No credentials submitted"}, status=HTTP_400_BAD_REQUEST

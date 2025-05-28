@@ -1,3 +1,4 @@
+import re
 from django.shortcuts import render
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -12,6 +13,7 @@ from rest_framework.status import (
 from django.contrib.auth.hashers import check_password, make_password
 from rest_framework_simplejwt.tokens import RefreshToken
 import json
+from users import serializers
 from users.models import User
 from .models import Admin, Comment
 from users.serializers import UserSerializer
@@ -101,6 +103,7 @@ def create_user(request):
         return Response(user_serializer.errors, status=HTTP_400_BAD_REQUEST)
 
     user_serializer.save()
+    print(user_serializer.data)
     response = {
         "username": user_serializer.data["username"],
         "email": user_serializer.data["email"],
@@ -117,7 +120,7 @@ def create_user(request):
 @permission_classes([IsAuthenticated])
 def add_comment(request):
     requested_by = request.user
-
+    print(request.body)
     try:
         admin = Admin.objects.get(email=requested_by.email)
     except Admin.DoesNotExist:
@@ -131,21 +134,75 @@ def add_comment(request):
     except json.JSONDecodeError:
         return Response({"message": "Invalid JSON"}, status=HTTP_400_BAD_REQUEST)
 
-    comment_text = comment_data.get("comment")
+    comment_text = comment_data.get("content")
     user_ids = comment_data.get("has_access")
 
-    if not comment_text or not user_ids:
+    if not comment_text:
         return Response(
             {"message": "Please add the comment and users who has access"},
             status=HTTP_400_BAD_REQUEST,
         )
 
-    valid_users = User.objects.filter(id__in=user_ids)
-    if not valid_users.exists():
-        return Response({"message": "No valid users found"}, status=HTTP_404_NOT_FOUND)
-
     comment = Comment.objects.create(content=comment_text)
-    comment.has_access.set(valid_users)
 
     serializer = CommentSerializer(comment)
     return Response(serializer.data, status=HTTP_201_CREATED)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def edit_comment(request):
+    try:
+        requested_by = request.user
+        try:
+            admin = Admin.objects.get(email=requested_by.email)
+        except Admin.DoesNotExist:
+            return Response({"message": "Not an admin"}, status=HTTP_401_UNAUTHORIZED)
+
+        if admin.role != "admin":
+            return Response({"message": "Not an admin"}, status=HTTP_401_UNAUTHORIZED)
+
+        try:
+            comment_data = json.loads(request.body)
+            comment_id = comment_data["id"]
+            content = comment_data["content"]
+            print(comment_id, content)
+
+            try:
+                current_comment = Comment.objects.get(id=comment_id)
+                current_comment.content = content
+                current_comment.save()
+
+                return Response({"message": "Comment Edited"}, status=HTTP_201_CREATED)
+            except Comment.DoesNotExist:
+                return Response(
+                    {"message": "No comment found"}, status=HTTP_400_BAD_REQUEST
+                )
+        except json.JSONDecodeError:
+            return Response({"message": "Invalid JSON"}, status=HTTP_400_BAD_REQUEST)
+    except Exception as e:
+        print(e)
+        return Response({"error": str(e)}, status=500)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_comments(request):
+    try:
+        comments = Comment.objects.all()
+        serializer = CommentSerializer(comments, many=True)
+        return Response(serializer.data)
+    except Exception as e:
+        return Response({"error": str(e)}, status=500)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_users(request):
+    try:
+        users = User.objects.all()
+        serializers = UserSerializer(users, many=True)
+        print(serializers)
+        return Response(serializers.data)
+    except Exception as e:
+        return Response({"error": str(e)}, status=500)

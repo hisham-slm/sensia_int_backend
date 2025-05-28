@@ -233,10 +233,12 @@ def add_role(request):
 
             try:
                 user = User.objects.get(id=id)
-                user.role = role
-                user.save()
-                print("user saved")
+                if role not in user.page_access:
+                    user.page_access.append(role)
+                    user.save()
+
                 return Response({"message": "Role added"}, status=HTTP_201_CREATED)
+
             except User.DoesNotExist:
                 return Response(
                     {"message": "User not found"}, status=HTTP_404_NOT_FOUND

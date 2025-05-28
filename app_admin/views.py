@@ -206,3 +206,48 @@ def get_users(request):
         return Response(serializers.data)
     except Exception as e:
         return Response({"error": str(e)}, status=500)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def add_role(request):
+    try:
+        requested_by = request.user
+        try:
+            admin = Admin.objects.get(email=requested_by.email)
+        except Admin.DoesNotExist:
+            return Response({"message": "Not an admin"}, status=HTTP_401_UNAUTHORIZED)
+
+        if admin.role != "admin":
+            return Response({"message": "Not an admin"}, status=HTTP_401_UNAUTHORIZED)
+
+        try:
+            role_data = json.loads(request.body)
+            id = role_data["id"]
+            role = role_data["role"]
+
+            if not id or not role:
+                return Response(
+                    {"message": "No data attached"}, status=HTTP_400_BAD_REQUEST
+                )
+
+            try:
+                user = User.objects.get(id=id)
+                user.role = role
+                user.save()
+                print("user saved")
+                return Response({"message": "Role added"}, status=HTTP_201_CREATED)
+            except User.DoesNotExist:
+                return Response(
+                    {"message": "User not found"}, status=HTTP_404_NOT_FOUND
+                )
+        except:
+            return Response(
+                {"message": "Server Error, something went wrong"},
+                status=HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+    except:
+        return Response(
+            {"message": "Server Error, something went wrong"},
+            status=HTTP_500_INTERNAL_SERVER_ERROR,
+        )
